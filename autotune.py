@@ -1,191 +1,304 @@
-import subprocess
-from get_profile import get_profile
+"""
+Autotune Implementation - Modern Python class-based approach
+Direct API integration without bash/subprocess dependencies
+"""
+
 import os
-from definitions import ROOT_DIR
-from data_processing.get_recommendations import get_recommendations
 import json
-from datetime import datetime as dt
 import pandas as pd
 from urllib.parse import urlparse
-from definitions import UPLOAD_FOLDER, home, PROFILE_FILES, recommendations_file_path
+from datetime import datetime
+from typing import Optional, Tuple, Dict, List
+import logging
+
+from autotune_engine import AutotuneEngine, AutotuneConfig
+from get_profile import get_profile
+from definitions import ROOT_DIR, UPLOAD_FOLDER, PROFILE_FILES, recommendations_file_path
 from file_management import checkdir
-from log import logging
+from log import logging as app_logging
 
-# AUTOTUNE CLASS
+
 class Autotune:
-	# URL VALIDATOR
-	# https://stackoverflow.com/questions/7160737/how-to-validate-a-url-in-python-malformed-or-not
-	def url_validator(self, x):
-		try:
-			result = urlparse(x)
-			return all([result.scheme, result.netloc])
-		except Exception as e:
-			logging.error(e)
-			return False
+    """Modern Python-only implementation of Autotune"""
+    
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        self.autotune_engine: Optional[AutotuneEngine] = None
+    
+    def url_validator(self, url: str) -> bool:
+        """Validate URL format"""
+        try:
+            result = urlparse(url)
+            return all([result.scheme, result.netloc])
+        except Exception as e:
+            self.logger.error(f"URL validation failed: {e}")
+            return False
+    
+    def clean_up(self):
+        """Clean up temporary files"""
+        directory = os.path.join(os.path.expanduser('~'), "myopenaps/settings")
+        
+        for profile_file in PROFILE_FILES:
+            file_path = os.path.join(directory, profile_file)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    self.logger.info(f"Removed {file_path}")
+                except OSError as e:
+                    self.logger.warning(f"Could not remove {file_path}: {e}")
+        
+        if os.path.exists(recommendations_file_path):
+            try:
+                os.remove(recommendations_file_path)
+                self.logger.info(f"Removed {recommendations_file_path}")
+            except OSError as e:
+                self.logger.warning(f"Could not remove {recommendations_file_path}: {e}")
+    
+    def get(self, nightscout: str, token: Optional[str] = None, 
+            insulin_type: str = "rapid-acting") -> Tuple[pd.DataFrame, pd.DataFrame, Dict]:
+        """Get profile data from Nightscout"""
+        try:
+            profile = get_profile(nightscout, insulin_type, token=token)
+            self.logger.info("Nightscout profile successfully retrieved")
+            
+            # Extract data for DataFrame format
+            carb_ratio = profile["carb_ratios"]["schedule"][0]["ratio"]
+            sensitivity = profile["isfProfile"]["sensitivities"][0]["sensitivity"]
+            
+            df_basals = pd.DataFrame.from_dict(profile["basalprofile"])
+            df_basals = df_basals.drop(["i", "minutes"], axis=1)
+            df_basals["start"] = df_basals["start"].str.slice(stop=-3)
+            df_basals = df_basals.rename(columns={"start": "Time", "rate": "Rate"})
+            
+            df_non_basals = pd.DataFrame(data={
+                'ISF [mg/dL/U]': [sensitivity], 
+                'ISF [mmol/L/U]': [sensitivity/18],  
+                'Carbratio (gr/U)': [carb_ratio]
+            })
+            
+            return df_basals, df_non_basals, profile
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get profile: {e}")
+            raise
 
-	# CLEAN UP FILES
-	def clean_up(self):
-		directory = "myopenaps/settings"
-		directory = os.path.join(os.path.expanduser('~'), directory)
-		for profile_file in PROFILE_FILES:
-			os.path.join(directory, profile_file)
-			command = "rm "+profile_file
-			subprocess.call(command, shell=True)
-		command2 = "rm {}".format(recommendations_file_path)
-		subprocess.call(command2, shell=True)
+    def get_specific_profile(self, nightscout: str, token: Optional[str] = None, 
+                           insulin_type: str = "rapid-acting", profile_name: Optional[str] = None) -> Tuple[pd.DataFrame, pd.DataFrame, Dict]:
+        """Get a specific profile by name from Nightscout"""
+        if not profile_name:
+            # Fall back to current profile
+            return self.get(nightscout, token, insulin_type)
+        
+        try:
+            from get_profile import get_profile_by_name, ns_to_oaps
+            from correct_current_basals import correct_current_basals
+            
+            # Format token for API call
+            token_param = f"token={token}" if token and not token.startswith("token=") else token
+            
+            # Get specific profile data
+            ns_profile = get_profile_by_name(nightscout, profile_name, token_param)
+            
+            # Convert to OpenAPS format
+            profile_openaps = ns_to_oaps(ns_profile)
+            profile = correct_current_basals(profile_openaps)
+            profile["curve"] = insulin_type
+            
+            self.logger.info(f"Successfully loaded profile '{profile_name}'")
+            
+            # Extract data same way as get() method
+            carb_ratio = profile["carb_ratios"]["schedule"][0]["ratio"]
+            sensitivity = profile["isfProfile"]["sensitivities"][0]["sensitivity"]
+            df_basals = pd.DataFrame.from_dict(profile["basalprofile"])
+            df_basals = df_basals.drop(["i", "minutes"], axis=1)
+            df_basals["start"] = df_basals["start"].str.slice(stop=-3)
+            df_basals = df_basals.rename(columns={"start": "Time", "rate": "Rate"})
+            df_non_basals = pd.DataFrame(data={'ISF [mg/dL/U]': [sensitivity], 'ISF [mmol/L/U]': [sensitivity/18],  'Carbratio (gr/U)': [carb_ratio]})
+            
+            return df_basals, df_non_basals, profile
+            
+        except Exception as e:
+            self.logger.error(f"Error loading specific profile '{profile_name}': {e}")
+            # Fall back to current profile
+            return self.get(nightscout, token, insulin_type)
+    
+    def run_modern(self, nightscout: str, start_date: str, end_date: str, 
+                   uam: bool = False, token: Optional[str] = None, 
+                   aggressive_mode: bool = False) -> Optional[pd.DataFrame]:
+        """
+        Modern Python-only autotune implementation
+        No subprocess calls, no bash dependencies
+        """
+        try:
+            # Validate inputs
+            if not self.url_validator(nightscout):
+                raise ValueError(f"Invalid Nightscout URL: {nightscout}")
+            
+            # Initialize autotune engine
+            self.autotune_engine = AutotuneEngine(nightscout, token, aggressive_mode=aggressive_mode)
+            
+            # Create autotune configuration
+            config = AutotuneConfig(
+                start_date=start_date,
+                end_date=end_date,
+                categorize_uam_as_basal=uam,
+                verbose=True
+            )
+            
+            self.logger.info(f"Starting modern autotune run: {start_date} to {end_date}")
+            
+            # Run autotune analysis
+            result = self.autotune_engine.run_autotune(config)
+            
+            if result['status'] != 'success':
+                self.logger.error(f"Autotune failed: {result.get('error', 'Unknown error')}")
+                return None
+            
+            # Convert recommendations to DataFrame format
+            recommendations = result['recommendations']
+            df_recommendations = pd.DataFrame(recommendations)
+            
+            self.logger.info(f"Autotune completed successfully with {len(recommendations)} recommendations")
+            
+            # Save results for web interface
+            self._save_results(result, start_date)
+            
+            return df_recommendations
+            
+        except Exception as e:
+            self.logger.error(f"Autotune run failed: {e}")
+            app_logging.error(f"Autotune run failed: {e}")
+            return None
+    
+    def run(self, nightscout: str, start_date: str, end_date: str, 
+            uam: bool = False, directory: str = "myopenaps", 
+            token: Optional[str] = None) -> Optional[pd.DataFrame]:
+        """
+        Main run method - uses Python-only implementation
+        """
+        try:
+            self.logger.info("Running Python-only autotune...")
+            result = self.run_modern(nightscout, start_date, end_date, uam, token)
+            
+            if result is not None:
+                self.logger.info("Autotune completed successfully")
+                return result
+            else:
+                self.logger.error("Autotune execution failed")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Autotune run failed: {e}")
+            return None
+    
+    def _save_results(self, result: Dict, start_date: str):
+        """Save autotune results to files for web interface"""
+        try:
+            # Create results directory
+            results_dir = os.path.join(ROOT_DIR, "autotune_results")
+            os.makedirs(results_dir, exist_ok=True)
+            
+            # Save complete result
+            result_file = os.path.join(results_dir, f"autotune_result_{start_date}.json")
+            with open(result_file, 'w') as f:
+                json.dump(result, f, indent=2, default=str)
+            
+            # Save recommendations in CSV format
+            if result['recommendations']:
+                df = pd.DataFrame(result['recommendations'])
+                csv_file = os.path.join(results_dir, f"recommendations_{start_date}.csv")
+                df.to_csv(csv_file, index=False)
+                
+            self.logger.info(f"Results saved to {results_dir}")
+            
+        except Exception as e:
+            self.logger.warning(f"Could not save results: {e}")
+    
+    def create_adjusted_profile(self, autotune_recomm: List[Dict], current_profile: Dict) -> Dict:
+        """Create adjusted profile based on autotune recommendations"""
+        try:
+            d = current_profile.copy()
+            
+            # Extract sensitivity and carb ratio from recommendations
+            for recommendation in autotune_recomm:
+                param = str(recommendation["Parameter"])
+                
+                if "ISF[mg/dL/U]" in param:
+                    sensitivity = recommendation["Autotune"]
+                    d["isfProfile"]["sensitivities"][0]["sensitivity"] = round(float(sensitivity) / 18, 1)
+                
+                elif "CarbRatio" in param:
+                    carb_ratio = recommendation["Autotune"]
+                    d["carb_ratios"]["schedule"][0]["ratio"] = round(float(carb_ratio), 1)
+                    d["carb_ratio"] = round(float(carb_ratio), 1)
+            
+            # Process basal recommendations
+            basal_updates = []
+            ftr = [3600, 60, 1]  # time conversion factors
+            
+            for recommendation in autotune_recomm:
+                param = recommendation["Parameter"]
+                
+                # Skip non-time parameters
+                if any(c.isalpha() for c in param) or ":" not in param:
+                    continue
+                
+                # Convert time string to seconds
+                try:
+                    sec = sum([a * b for a, b in zip(ftr, map(int, param.split(':')))])
+                    hour = sec // 3600
+                    
+                    if 0 <= hour < 24:
+                        basal_entry = {
+                            'i': hour,
+                            'minutes': 60.0 * hour,
+                            'start': f'{hour:02d}:00:00',
+                            'rate': f"{float(recommendation['Autotune']):.2f}"
+                        }
+                        basal_updates.append(basal_entry)
+                        
+                except (ValueError, IndexError) as e:
+                    self.logger.warning(f"Could not parse time parameter {param}: {e}")
+            
+            if basal_updates:
+                d["basalprofile"] = sorted(basal_updates, key=lambda x: x['i'])
+            
+            return d
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create adjusted profile: {e}")
+            return current_profile
+    
+    def upload(self, nightscout: str, profile: Dict, token: str) -> bool:
+        """Upload profile to Nightscout (placeholder - needs API implementation)"""
+        try:
+            # This would need to be implemented with direct API calls
+            # rather than external tool dependencies
+            self.logger.warning("Profile upload not yet implemented")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Profile upload failed: {e}")
+            return False
 
-	# GET PROFILE
-	def get(self, nightscout, token=None, insulin_type="rapid-acting"):
-		profile = get_profile(nightscout, insulin_type, token=token)
-		print("nightscout profile succesfully retreived")
-		d = profile
-		print("test1", d)
-		carb_ratio = d["carb_ratios"]["schedule"][0]["ratio"]
-		sensitivity = d["isfProfile"]["sensitivities"][0]["sensitivity"]
-		df_basals = pd.DataFrame.from_dict(d["basalprofile"])
-		df_basals = df_basals.drop(["i", "minutes"], axis=1)
-		df_basals["start"] = df_basals["start"].str.slice(stop=-3)
-		df_basals = df_basals.rename(columns={"start": "Time", "rate": "Rate"})
-		df_non_basals = pd.DataFrame(data={'ISF [mg/dL/U]': [sensitivity], 'ISF [mmol/L/U]': [sensitivity/18],  'Carbratio (gr/U)': [carb_ratio]})
-		return df_basals, df_non_basals, profile
 
-	# GET RECOMMENDATIONS
-	def run(self, nightscout, start_date, end_date, uam=False, directory="myopenaps"):
-		try:
-			if not 'end_date':
-				end_date = dt.utcnow().date().strftime("%Y-%m-%d")
-			myopenaps = os.path.join(os.path.expanduser('~'), directory)
-			checkdir(myopenaps)
-			print("starting autotune run")
-			if uam:
-				command2 = "oref0-autotune --dir={} --ns-host={} --start-date={}  --end-date={}  --categorize-uam-as-basal=true > logfile.txt".format(
-					myopenaps, nightscout, start_date, end_date, )
-			else:
-				command2 = "oref0-autotune --dir={} --ns-host={} --start-date={}  --end-date={}  > logfile.txt".format(myopenaps, nightscout, start_date, end_date,)
-			subprocess.call(command2, shell=True)
-			os.chdir(ROOT_DIR)
-			print("getting recommendations")
-			df_recommendations = get_recommendations()
-			return df_recommendations
-		except Exception as e:
-			logging.error(e)
-			return None
-
-
-	# CREATE ADJUSTED PROFILE BASED ON USERINPUT
-	def create_adjusted_profile(self, autotune_recomm, old_profile):
-		# initiate variables
-		l = autotune_recomm
-		d = old_profile
-
-		# extract sensitivity and carbratio from autotune recommendations dictionary and insert in old profile
-		for i in l:
-			if "ISF[mg/dL/U]" in str(i["Parameter"]):
-				sensitivity = i["Autotune"]
-			if "CarbRatio" in str(i["Parameter"]):
-				carb_ratio = i["Autotune"]
-
-		d["carb_ratios"]["schedule"][0]["ratio"] = round(float(carb_ratio), 1)
-		d["carb_ratio"] = round(float(carb_ratio), 1)
-		d["isfProfile"]["sensitivities"][0]["sensitivity"] = round((float(sensitivity) / 18), 1)
-
-		# extract basal value from autotune recommendations dictionary into list "m"
-		ftr = [3600, 60, 1]
-		m = []
-		print(l)
-		for i, j in enumerate(l):
-			if any(c.isalpha() for c in j["Parameter"]):
-				continue
-			timestr = j["Parameter"]
-			# convert time string to seconds
-			# source https://stackoverflow.com/questions/10663720/how-to-convert-a-time-string-to-seconds
-			sec = sum([a * b for a, b in zip(ftr, map(int, timestr.split(':')))])
-			for k in range(0, 24):
-				if (k * 3600) == sec:
-					l = {'i': k, 'minutes': 60.0 * k, 'start': '{:02d}:00:00'.format(k),
-						 'rate': "{:.2f}".format(float(j["Autotune"]))}
-					m.append(l)
-
-		# save list in old profile basalprofile,thereby creating a profile with new basal rates
-		d["basalprofile"] = m
-
-		return d
-
-
-	# UPLOAD TO NIGTHSCOUT AND ACTIVATE
-	def upload(self, nightscout, profile, token):
-		try:
-			file_name = "/profile_2_upload.json"
-			file_path = os.path.join(ROOT_DIR+UPLOAD_FOLDER + file_name)
-			with open(file_path, 'w', encoding='utf-8') as f:
-				json.dump(profile, f, ensure_ascii=False, indent=4)
-			print("dumped json file")
-			print(file_path)
-			print(UPLOAD_FOLDER+file_name)
-			command3 = "oref0-upload-profile {} {} {} --switch=true".format(UPLOAD_FOLDER+file_name, nightscout, token)
-			subprocess.call(command3, shell=True)
-			command4 = "rm "+file_path
-			subprocess.call(command4, shell=True)
-			self.clean_up()
-			return True
-		except Exception as e:
-			logging.error(e)
-			return False
-
+# Example usage and testing
 if __name__ == "__main__":
-	a = Autotune()
-	a.upload(
-		"https://tig-diab.herokuapp.com",
-		[{'Parameter': 'ISF[mg/dL/U]', 'Pump': '45.00', 'Autotune': '45.05', 'DaysMissing': None},
-		 {'Parameter': 'ISF[mmol/L/U]', 'Pump': '2.50', 'Autotune': '2.50', 'DaysMissing': None},
-		 {'Parameter': 'CarbRatio[g/U]', 'Pump': '12.00', 'Autotune': '10.70', 'DaysMissing': None},
-		 {'Parameter': 'Basals[U/hr]', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '00:00', 'Pump': '0.51', 'Autotune': '0.63', 'DaysMissing': '1'},
-		 {'Parameter': '00:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '01:00', 'Pump': '0.58', 'Autotune': '0.66', 'DaysMissing': '1'},
-		 {'Parameter': '01:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '02:00', 'Pump': '0.60', 'Autotune': '0.68', 'DaysMissing': '2'},
-		 {'Parameter': '02:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '03:00', 'Pump': '0.61', 'Autotune': '0.70', 'DaysMissing': '2'},
-		 {'Parameter': '03:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '04:00', 'Pump': '0.61', 'Autotune': '0.72', 'DaysMissing': '1'},
-		 {'Parameter': '04:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '05:00', 'Pump': '0.62', 'Autotune': '0.72', 'DaysMissing': '1'},
-		 {'Parameter': '05:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '06:00', 'Pump': '0.62', 'Autotune': '0.72', 'DaysMissing': '1'},
-		 {'Parameter': '06:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '07:00', 'Pump': '0.62', 'Autotune': '0.72', 'DaysMissing': '1'},
-		 {'Parameter': '07:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '08:00', 'Pump': '0.61', 'Autotune': '0.70', 'DaysMissing': '0'},
-		 {'Parameter': '08:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '09:00', 'Pump': '0.59', 'Autotune': '0.68', 'DaysMissing': '0'},
-		 {'Parameter': '09:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '10:00', 'Pump': '0.56', 'Autotune': '0.64', 'DaysMissing': '0'},
-		 {'Parameter': '10:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '11:00', 'Pump': '0.52', 'Autotune': '0.60', 'DaysMissing': '1'},
-		 {'Parameter': '11:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '12:00', 'Pump': '0.48', 'Autotune': '0.57', 'DaysMissing': '1'},
-		 {'Parameter': '12:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '13:00', 'Pump': '0.44', 'Autotune': '0.54', 'DaysMissing': '1'},
-		 {'Parameter': '13:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '14:00', 'Pump': '0.41', 'Autotune': '0.51', 'DaysMissing': '1'},
-		 {'Parameter': '14:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '15:00', 'Pump': '0.40', 'Autotune': '0.49', 'DaysMissing': '2'},
-		 {'Parameter': '15:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '16:00', 'Pump': '0.40', 'Autotune': '0.47', 'DaysMissing': '2'},
-		 {'Parameter': '16:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '17:00', 'Pump': '0.41', 'Autotune': '0.46', 'DaysMissing': '2'},
-		 {'Parameter': '17:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '18:00', 'Pump': '0.42', 'Autotune': '0.46', 'DaysMissing': '1'},
-		 {'Parameter': '18:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '19:00', 'Pump': '0.42', 'Autotune': '0.47', 'DaysMissing': '2'},
-		 {'Parameter': '19:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '20:00', 'Pump': '0.43', 'Autotune': '0.49', 'DaysMissing': '2'},
-		 {'Parameter': '20:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '21:00', 'Pump': '0.44', 'Autotune': '0.51', 'DaysMissing': '3'},
-		 {'Parameter': '21:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '22:00', 'Pump': '0.45', 'Autotune': '0.53', 'DaysMissing': '3'},
-		 {'Parameter': '22:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''},
-		 {'Parameter': '23:00', 'Pump': '0.46', 'Autotune': '0.54', 'DaysMissing': '3'},
-		 {'Parameter': '23:30', 'Pump': '', 'Autotune': '', 'DaysMissing': ''}]
-	, None)
+    logging.basicConfig(level=logging.INFO)
+    
+    autotune = Autotune()
+    
+    # Test with your Nightscout instance
+    result = autotune.run_modern(
+        nightscout="https://your-nightscout-site.herokuapp.com",
+        start_date="2025-11-04",
+        end_date="2025-11-05",
+        uam=False,
+        token="your-api-secret-here"  # Replace with actual token
+    )
+    
+    if result is not None:
+        print("Modern autotune successful!")
+        print(result.head())
+    else:
+        print("Modern autotune failed")

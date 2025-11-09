@@ -1,0 +1,199 @@
+{
+  "autosens_max": 1.2,
+  "autosens_min": 0.7,
+  "basalprofile": [
+    {
+      "i": 0,
+      "minutes": 0,
+      "rate": 0.85,
+      "start": "00:00:00"
+    },
+    {
+      "i": 1,
+      "minutes": 60,
+      "rate": 0.72,
+      "start": "01:00:00"
+    },
+    {
+      "i": 2,
+      "minutes": 120,
+      "rate": 0.68,
+      "start": "02:00:00"
+    },
+    {
+      "i": 3,
+      "minutes": 480,
+      "rate": 1.15,
+      "start": "08:00:00"
+    },
+    {
+      "i": 4,
+      "minutes": 660,
+      "rate": 1.32,
+      "start": "11:00:00"
+    },
+    {
+      "i": 5,
+      "minutes": 720,
+      "rate": 1.28,
+      "start": "12:00:00"
+    },
+    {
+      "i": 6,
+      "minutes": 840,
+      "rate": 1.41,
+      "start": "14:00:00"
+    },
+    {
+      "i": 7,
+      "minutes": 960,
+      "rate": 1.24,
+      "start": "16:00:00"
+    },
+    {
+      "i": 8,
+      "minutes": 1080,
+      "rate": 1.08,
+      "start": "18:00:00"
+    },
+    {
+      "i": 9,
+      "minutes": 1320,
+      "rate": 0.94,
+      "start": "22:00:00"
+    }
+  ],
+  "bg_targets": {
+    "targets": [
+      {
+        "high": 120,
+        "i": 0,
+        "low": 80,
+        "max_bg": 120,
+        "min_bg": 80,
+        "offset": 0,
+        "start": "00:00:00"
+      },
+      {
+        "high": 140,
+        "i": 1,
+        "low": 85,
+        "max_bg": 140,
+        "min_bg": 85,
+        "offset": 28800,
+        "start": "08:00:00"
+      },
+      {
+        "high": 120,
+        "i": 2,
+        "low": 80,
+        "max_bg": 120,
+        "min_bg": 80,
+        "offset": 79200,
+        "start": "22:00:00"
+      }
+    ],
+    "units": "mg/dl",
+    "user_preferred_units": "mg/dl"
+  },
+  "carb_ratio": 12.5,
+  "carb_ratios": {
+    "first": 1,
+    "schedule": [
+      {
+        "i": 0,
+        "offset": 0,
+        "ratio": 12.5,
+        "start": "00:00:00"
+      },
+      {
+        "i": 1,
+        "offset": 480,
+        "ratio": 11.2,
+        "start": "08:00:00"
+      },
+      {
+        "i": 2,
+        "offset": 720,
+        "ratio": 13.1,
+        "start": "12:00:00"
+      },
+      {
+        "i": 3,
+        "offset": 1080,
+        "ratio": 10.8,
+        "start": "18:00:00"
+      }
+    ],
+    "units": "grams"
+  },
+  "curve": "rapid-acting",
+  "dia": 6.0,
+  "isfProfile": {
+    "first": 1,
+    "sensitivities": [
+      {
+        "i": 0,
+        "offset": 0,
+        "sensitivity": 40.0,
+        "start": "00:00:00"
+      },
+      {
+        "i": 1,
+        "offset": 60,
+        "sensitivity": 38.0,
+        "start": "01:00:00"
+      },
+      {
+        "i": 2,
+        "offset": 120,
+        "sensitivity": 42.0,
+        "start": "02:00:00"
+      },
+      {
+        "i": 3,
+        "offset": 480,
+        "sensitivity": 35.0,
+        "start": "08:00:00"
+      },
+      {
+        "i": 4,
+        "offset": 660,
+        "sensitivity": 44.0,
+        "start": "11:00:00"
+      },
+      {
+        "i": 5,
+        "offset": 720,
+        "sensitivity": 39.0,
+        "start": "12:00:00"
+      },
+      {
+        "i": 6,
+        "offset": 840,
+        "sensitivity": 41.0,
+        "start": "14:00:00"
+      },
+      {
+        "i": 7,
+        "offset": 960,
+        "sensitivity": 36.0,
+        "start": "16:00:00"
+      },
+      {
+        "i": 8,
+        "offset": 1080,
+        "sensitivity": 43.0,
+        "start": "18:00:00"
+      },
+      {
+        "i": 9,
+        "offset": 1320,
+        "sensitivity": 37.0,
+        "start": "22:00:00"
+      }
+    ]
+  },
+  "min_5m_carbimpact": 8.0,
+  "timezone": "America/New_York"
+}

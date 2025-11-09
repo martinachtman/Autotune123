@@ -2,7 +2,12 @@ import numpy as np
 
 
 def clean_values(df):
-    if df["Pump"][3] != float: # remove dash from series
+    # Handle empty DataFrame case
+    if df.empty or 'Pump' not in df.columns:
+        print("Warning: Empty or invalid DataFrame provided to clean_values")
+        return df
+        
+    if len(df["Pump"]) > 3 and df["Pump"][3] != float: # remove dash from series
         df["Pump"][3] = ""
     df["Pump"] = df["Pump"].replace('',np.nan).astype(float)
     df["Autotune"] = df["Autotune"].replace('',np.nan).astype(float)

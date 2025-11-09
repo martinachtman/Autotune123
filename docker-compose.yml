@@ -1,0 +1,111 @@
+services:
+  # Production service (default)
+  autotune123:
+    build: .
+    ports:
+      - "8080:8080"  # Map host port 8080 to container port 8080
+    volumes:
+      # Mount system timezone info (more reliable than TZ environment variable)
+      - /etc/localtime:/etc/localtime:ro
+      # Mount data directory for persistence (optional)
+      # - ./data:/app/Autotune123/data
+    env_file:
+      - .env  # Load environment variables from .env file
+    environment:
+      # Override any .env settings here if needed
+      - PYTHONUNBUFFERED=1  # Ensure logs are not buffered
+      # CRITICAL: Timezone affects basal rate scheduling and data interpretation
+      # Primary method: Container inherits host timezone via volume mounts above
+      # Fallback method: Set TIMEZONE environment variable if volume mounts fail
+      # Set this to match your pump's timezone to ensure accurate basal rate timing
+      # Examples: Europe/Amsterdam, America/New_York, Australia/Sydney
+      # - TIMEZONE=UTC
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]  # Check internal port
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Development service
+  autotune123-dev:
+    build: .
+    ports:
+      - "5000:8080"
+    volumes:
+      # Mount system timezone info (more reliable than TZ environment variable)
+      - /etc/localtime:/etc/localtime:ro
+      # Mount source code for live reload
+      - .:/app/Autotune123
+    env_file:
+      - .env  # Load environment variables from .env file
+    environment:
+      # Development-specific overrides
+      - ENV=development
+      - FLASK_ENV=development
+      - FLASK_DEBUG=true
+      - PYTHONUNBUFFERED=1  # Ensure logs are not buffered
+      # CRITICAL: Timezone affects basal rate scheduling and data interpretation
+      # Primary method: Container inherits host timezone via volume mounts above
+      # Fallback method: Set TIMEZONE environment variable if volume mounts fail
+      # Set this to match your pump's timezone to ensure accurate basal rate timing
+      # Examples: Europe/Amsterdam, America/New_York, Australia/Sydney
+      # - TIMEZONE=UTC
+    profiles:
+      - dev
+
+  # Test service for running comprehensive test suite
+  autotune123-test:
+    build: .
+    container_name: autotune123-test
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./tests:/app/Autotune123/tests
+      - ./coverage:/app/Autotune123/coverage
+    environment:
+      - ENV=testing
+      - FLASK_ENV=testing
+      - PYTHONPATH=/app/Autotune123
+      - PYTHONUNBUFFERED=1
+    command: >
+      bash -c "
+        echo '🧪 Running Core Autotune Test Suite' &&
+        python tests/run_core_tests.py
+      "
+    profiles:
+      - test
+
+  # Unit tests only
+  unit-tests:
+    build: .
+    container_name: autotune123-unit-tests
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./tests:/app/Autotune123/tests
+    environment:
+      - ENV=testing
+      - FLASK_ENV=testing
+      - PYTHONPATH=/app/Autotune123
+      - PYTHONUNBUFFERED=1
+    command: python tests/run_core_tests.py
+    profiles:
+      - test
+
+  # Integration tests only
+  integration-tests:
+    build: .
+    container_name: autotune123-integration-tests
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./tests:/app/Autotune123/tests
+    env_file:
+      - .env  # Integration tests may need real config
+    environment:
+      - ENV=testing
+      - FLASK_ENV=testing
+      - PYTHONPATH=/app/Autotune123
+      - PYTHONUNBUFFERED=1
+    command: python tests/test_guaranteed_working.py
+    profiles:
+      - test

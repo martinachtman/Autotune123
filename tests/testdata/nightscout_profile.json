@@ -1,0 +1,165 @@
+{
+  "dia": 6,
+  "timezone": "America/New_York",
+  "units": "mg/dl",
+  "carbratio": [
+    {
+      "time": "00:00",
+      "value": 12.5,
+      "timeAsSeconds": 0
+    },
+    {
+      "time": "08:00", 
+      "value": 11.2,
+      "timeAsSeconds": 28800
+    },
+    {
+      "time": "12:00",
+      "value": 13.1,
+      "timeAsSeconds": 43200
+    },
+    {
+      "time": "18:00",
+      "value": 10.8,
+      "timeAsSeconds": 64800
+    }
+  ],
+  "sens": [
+    {
+      "time": "00:00",
+      "value": 40,
+      "timeAsSeconds": 0
+    },
+    {
+      "time": "01:00",
+      "value": 38,
+      "timeAsSeconds": 3600
+    },
+    {
+      "time": "02:00",
+      "value": 42,
+      "timeAsSeconds": 7200
+    },
+    {
+      "time": "08:00",
+      "value": 35,
+      "timeAsSeconds": 28800
+    },
+    {
+      "time": "11:00",
+      "value": 44,
+      "timeAsSeconds": 39600
+    },
+    {
+      "time": "12:00",
+      "value": 39,
+      "timeAsSeconds": 43200
+    },
+    {
+      "time": "14:00",
+      "value": 41,
+      "timeAsSeconds": 50400
+    },
+    {
+      "time": "16:00",
+      "value": 36,
+      "timeAsSeconds": 57600
+    },
+    {
+      "time": "18:00",
+      "value": 43,
+      "timeAsSeconds": 64800
+    },
+    {
+      "time": "22:00",
+      "value": 37,
+      "timeAsSeconds": 79200
+    }
+  ],
+  "basal": [
+    {
+      "time": "00:00",
+      "value": 0.85,
+      "timeAsSeconds": 0
+    },
+    {
+      "time": "01:00",
+      "value": 0.72,
+      "timeAsSeconds": 3600
+    },
+    {
+      "time": "02:00",
+      "value": 0.68,
+      "timeAsSeconds": 7200
+    },
+    {
+      "time": "08:00",
+      "value": 1.15,
+      "timeAsSeconds": 28800
+    },
+    {
+      "time": "11:00",
+      "value": 1.32,
+      "timeAsSeconds": 39600
+    },
+    {
+      "time": "12:00",
+      "value": 1.28,
+      "timeAsSeconds": 43200
+    },
+    {
+      "time": "14:00",
+      "value": 1.41,
+      "timeAsSeconds": 50400
+    },
+    {
+      "time": "16:00",
+      "value": 1.24,
+      "timeAsSeconds": 57600
+    },
+    {
+      "time": "18:00",
+      "value": 1.08,
+      "timeAsSeconds": 64800
+    },
+    {
+      "time": "22:00",
+      "value": 0.94,
+      "timeAsSeconds": 79200
+    }
+  ],
+  "target_low": [
+    {
+      "time": "00:00",
+      "value": 80,
+      "timeAsSeconds": 0
+    },
+    {
+      "time": "08:00",
+      "value": 85,
+      "timeAsSeconds": 28800
+    },
+    {
+      "time": "22:00",
+      "value": 80,
+      "timeAsSeconds": 79200
+    }
+  ],
+  "target_high": [
+    {
+      "time": "00:00",
+      "value": 120,
+      "timeAsSeconds": 0
+    },
+    {
+      "time": "08:00",
+      "value": 140,
+      "timeAsSeconds": 28800
+    },
+    {
+      "time": "22:00",
+      "value": 120,
+      "timeAsSeconds": 79200
+    }
+  ]
+}
