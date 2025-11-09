@@ -2,6 +2,10 @@ import os
 import sys
 from dotenv import load_dotenv
 from dash import html
+
+# Load environment variables from config.env file
+load_dotenv('config.env')
+# Also try loading from .env as fallback
 load_dotenv()
 
 

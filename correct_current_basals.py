@@ -62,7 +62,9 @@ def correct_current_basals(profile):
     with open(name_intermediary_txt) as f:
         lines = f.readlines()
     for i,j in enumerate(lines):
-        j = eval(j)
+        # Use ast.literal_eval instead of eval for security
+        import ast
+        j = ast.literal_eval(j.strip())
         j["i"] = i
         basals.append(j)
     profile["basalprofile"] = basals

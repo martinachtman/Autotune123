@@ -19,13 +19,16 @@ step3_graph = html.Div([
                 style={"textAlign":"right"},
             ),
             dbc.Col(
-                dcc.Dropdown(
-                    ['No filter', 'Savitzky-Golay 11.6', "Savitzky-Golay 17.5", "Savitzky-Golay 23.3"],
-                    'No filter',
-                    placeholder="Choose a filter",
-                    id="dropdown",
-                    clearable=False
-                ),
+                [
+                    dcc.Dropdown(
+                        ['No filter', 'Savitzky-Golay 11.6', "Savitzky-Golay 17.5", "Savitzky-Golay 23.3"],
+                        'No filter',
+                        placeholder="Choose a filter",
+                        id="dropdown",
+                        clearable=False
+                    ),
+                    html.Div(id="filter-status", style={"margin-top": "5px", "font-size": "12px", "color": "#666"})
+                ],
                 width={"size": 2, "order": 2, "offset": 0},
             ),
             dbc.Col(

@@ -21,6 +21,112 @@ PROFILE_FILES = ['autotune.json', 'profile.json', 'pumpprofile.json']
 TIMED_ENTRIES = ['carbratio', 'sens', 'basal', 'target_low', 'target_high']
 
 
+def normalize_nightscout_url(nightscout_url):
+    """
+    Normalize Nightscout URL by removing trailing slashes
+    """
+    if nightscout_url:
+        return nightscout_url.rstrip('/')
+    return nightscout_url
+
+
+def get_all_profiles(nightscout, token=None):
+    """
+    Get all available profiles from Nightscout
+    Returns a list of profile information with names and details
+    """
+    nightscout = normalize_nightscout_url(nightscout)
+    r_url = nightscout + "/api/v1/profile.json"
+    if token is not None:
+        r_url = r_url + "?" + token
+    
+    try:
+        response = requests.get(r_url)
+        status_msg = f"Nightscout API Status: {response.status_code}"
+        print(status_msg)
+        
+        if response.status_code != 200:
+            error_msg = f"Nightscout API returned status {response.status_code}: {response.text[:200]}"
+            print(error_msg, file=sys.stderr)
+            raise ValueError(error_msg)
+        
+        p_list = response.json()
+        
+        if isinstance(p_list, str):
+            error_msg = f"Nightscout API returned error message: {p_list}"
+            print(error_msg, file=sys.stderr)
+            raise ValueError(error_msg)
+        
+        if isinstance(p_list, dict):
+            if 'error' in p_list:
+                error_msg = f"Nightscout API error: {p_list['error']}"
+                print(error_msg, file=sys.stderr)
+                raise ValueError(error_msg)
+            if 'message' in p_list:
+                error_msg = f"Nightscout API message: {p_list['message']}"
+                print(error_msg, file=sys.stderr)
+                raise ValueError(error_msg)
+            raise ValueError(f"Expected list of profiles but got dict. Check your Nightscout profile configuration.")
+        
+        if not isinstance(p_list, list):
+            error_msg = f"Expected list but got {type(p_list)}: {str(p_list)[:200]}"
+            print(error_msg, file=sys.stderr)
+            raise ValueError(error_msg)
+        
+        if len(p_list) == 0:
+            error_msg = "No profiles found in Nightscout. Please configure at least one profile."
+            print(error_msg, file=sys.stderr)
+            raise ValueError(error_msg)
+            
+        # Extract all available profile names from all profile entries
+        all_profile_names = set()
+        profile_details = []
+        
+        for profile_entry in p_list:
+            if 'store' in profile_entry:
+                for profile_name in profile_entry['store'].keys():
+                    all_profile_names.add(profile_name)
+                    profile_details.append({
+                        'name': profile_name,
+                        'startDate': profile_entry.get('startDate', ''),
+                        'defaultProfile': profile_entry.get('defaultProfile', ''),
+                        'isDefault': profile_name == profile_entry.get('defaultProfile', ''),
+                        'data': profile_entry['store'][profile_name]
+                    })
+        
+        success_msg = f"Found {len(all_profile_names)} unique profile name(s) in {len(p_list)} profile entries"
+        print(success_msg)
+        print(success_msg, file=sys.stderr)
+        
+        return profile_details
+        
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Failed to connect to Nightscout at {r_url}: {e}")
+    except ValueError:
+        raise  # Re-raise ValueError as-is
+    except Exception as e:
+        raise ValueError(f"Failed to parse JSON from Nightscout: {e}")
+
+def get_profile_by_name(nightscout, profile_name, token=None):
+    """
+    Get a specific profile by name from Nightscout
+    """
+    all_profiles = get_all_profiles(nightscout, token)
+    
+    # Find the most recent profile with the specified name
+    matching_profiles = [p for p in all_profiles if p['name'] == profile_name]
+    
+    if not matching_profiles:
+        available_names = list(set([p['name'] for p in all_profiles]))
+        raise ValueError(f"Profile '{profile_name}' not found. Available profiles: {available_names}")
+    
+    # Sort by startDate and get the most recent
+    matching_profiles.sort(key=lambda x: x['startDate'], reverse=True)
+    selected_profile = matching_profiles[0]
+    
+    print(f"Selected profile '{profile_name}' from {selected_profile['startDate']}")
+    return selected_profile['data']
+
 def get_current_profile(nightscout, token=None):
     """
     Try to get the active profile
@@ -28,10 +134,42 @@ def get_current_profile(nightscout, token=None):
     # GET ACTIVE PROFILE BASED ON LATEST CREATION DATE
     # older version of get_profile used to rely on the resulting profile of the latest switch
     # the code beneath gave me a somewhat more consistent result
+    nightscout = normalize_nightscout_url(nightscout)
     r_url = nightscout + "/api/v1/profile.json"
     if token is not None:
         r_url = r_url + "?" + token
-    p_list = requests.get(r_url).json()
+    
+        # Enhanced error handling for Nightscout API
+    try:
+        response = requests.get(r_url)
+        
+        if response.status_code != 200:
+            raise ValueError(f"Nightscout API returned status {response.status_code}: {response.text[:200]}")
+        
+        p_list = response.json()
+        
+        if isinstance(p_list, str):
+            raise ValueError(f"Nightscout API returned error message: {p_list}")
+        
+        if isinstance(p_list, dict) and ('error' in p_list or 'message' in p_list):
+            error_msg = p_list.get('error') or p_list.get('message')
+            raise ValueError(f"Nightscout API error: {error_msg}")
+        
+        if not isinstance(p_list, list):
+            raise ValueError(f"Expected list of profiles but got {type(p_list)}. Check your Nightscout profile configuration.")
+        
+        if len(p_list) == 0:
+            raise ValueError("No profiles found in Nightscout. Please configure at least one profile.")
+            
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Failed to connect to Nightscout at {r_url}: {e}")
+    except ValueError:
+        raise  # Re-raise ValueError as-is
+    except Exception as e:
+        raise ValueError(f"Failed to parse JSON from Nightscout: {e}")
+    
+    p_list = response.json()
+    
     list_of_dates = [i["startDate"] for i in p_list]
     date_of_latest_activated_profile = max(list_of_dates)
     l = [i for i in p_list if (i["startDate"] == date_of_latest_activated_profile)][0]
@@ -227,7 +365,7 @@ def get_profile(nightscout, insulin_type, directory="myopenaps/settings", token=
     return profile
 
 if __name__ == "__main__":
-    profile = get_profile("NS_host")
+    profile = get_profile("NS_host", "rapid-acting")
     from pprint import pprint
     pprint(profile)
 

@@ -2,10 +2,18 @@
 
 def adjust_table(df, new_columns, column_names, start_row_index):
     """Insert the given columns (new_columns = list of new columns) into the pandas dataframe based on column names and start index"""
-    for i,new_column in enumerate(new_columns):
-        if new_column: # if column not emptuy
-            # https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.replace.html
-            df.loc[start_row_index:len(df[column_names[i]]),column_names[i]] = new_column
+    for i, new_column in enumerate(new_columns):
+        if new_column and len(new_column) > 0:  # if column not empty and has data
+            # Calculate the end index based on the available data and new column length
+            end_index = min(start_row_index + len(new_column) - 1, len(df) - 1)
+            
+            # Ensure we don't exceed DataFrame bounds
+            if start_row_index < len(df) and column_names[i] in df.columns:
+                # Only assign values up to the smaller of: available rows or new column length
+                slice_length = end_index - start_row_index + 1
+                column_slice = new_column[:slice_length]  # Truncate new_column if needed
+                
+                df.loc[start_row_index:end_index, column_names[i]] = column_slice
     return df
 
 def isfloat(num):

@@ -1,81 +1,76 @@
 import numpy as np
+import pandas as pd
 from scipy.signal import savgol_filter
 
 
 def get_filtered_data(df, filter="No filter"):
-    """Clean lists by removing sensitivity, removing IC ratio, removing empty values and converting strings
-     with ratios to floats. Also removes the half hour values from recommendations"""
+    """Clean lists by removing sensitivity, removing IC ratio, and handling sparse basal data.
+     Works with realistic basal profiles that only have entries when rates change."""
 
-    # x
-    l = df["Parameter"].to_list()
-    l_time = []
-    for string in l[3:]:
-        if string == "":
-            string = np.nan
-            l_time.append(string)
-        else:
-            l_time.append(string)
+    # Check if DataFrame is empty or missing required columns
+    if df.empty or "Parameter" not in df.columns:
+        print("Warning: Empty or invalid DataFrame provided to get_filtered_data")
+        return [], [], []
 
-    # y1
-    l1 = df["Pump"].to_list()
-    l1_new = []
-    for string in l1[3:]:
-        if string == "":
-            string = np.nan
-            l1_new.append(string)
-        else:
-            l1_new.append(string)
-    l1 = list(map(float, l1_new))
-
-    # y2
-    l2 = df["Autotune"].to_list()
-    l2 = l2[3:]
-    l2_new = []
-    for string in l2:
-        if string == "":
-            string = np.nan
-            l2_new.append(string)
-        else:
-            l2_new.append(string)
-    l2 = list(map(float, l2_new))
-    l2 = np.asarray(l2)
-
-    # apply filter
-    l2_clean = l2[::2]  # remove empty values
-    if filter == "No filter":
-        l3 = l2_clean
+    # Extract all basal data starting from index 2 (skip ISF and CarbRatio headers)
+    # Index 2 should be "00:00" - the first basal time slot
+    full_data = df.iloc[2:].copy()  # Skip ISF and CarbRatio rows
+    
+    # Extract time labels, pump values, and autotune values
+    times = full_data["Parameter"].tolist()
+    pump_values = full_data["Pump"].tolist()
+    autotune_values = full_data["Autotune"].tolist()
+    
+    # Convert string values to float, keep NaN for empty strings
+    def convert_to_float(val):
+        if val == "" or val is None or pd.isna(val):
+            return np.nan
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return np.nan
+    
+    # Convert pump and autotune values to float
+    pump_float = [convert_to_float(val) for val in pump_values]
+    autotune_float = [convert_to_float(val) for val in autotune_values]
+    
+    # Extract only the non-NaN autotune values for filtering
+    autotune_clean = [val for val in autotune_float if not np.isnan(val)]
+    
+    # Apply the selected filter to the clean values
+    if filter == "No filter" or filter == "None" or filter is None:
+        filtered_values = autotune_clean
     else:
-        if filter == "Savitzky-Golay 11.6":
-            l3 = savgol_filter(l2_clean, 11, 6)
-        elif filter == "Savitzky-Golay 17.5":
-            l3 = savgol_filter(l2_clean, 17, 5)
-        elif filter == "Savitzky-Golay 23.3":
-            l3 = savgol_filter(l2_clean, 23, 3)
-
-    # update numpy array of recommendations (l2) with list of filtered values
-    n = 0
-    for i, j in enumerate(l2):
-        if not np.isnan(j):
-            l2[i] = l3[n]
-            n += 1
-    l2 = l2.tolist()
-
-    # round numbers
-    l2 = [round(num, 2) for num in l2]
-
-
-    # remove half hour values
-    l=[]
-    for i, j in enumerate(l1):
-        if (i + 1) % 2 == 0:
-            l.append("nan")
+        if len(autotune_clean) > 0:
+            if filter == "Savitzky-Golay 11.6" and len(autotune_clean) >= 11:
+                filtered_values = savgol_filter(autotune_clean, 11, 6).tolist()
+            elif filter == "Savitzky-Golay 17.5" and len(autotune_clean) >= 17:
+                filtered_values = savgol_filter(autotune_clean, 17, 5).tolist()
+            elif filter == "Savitzky-Golay 23.3" and len(autotune_clean) >= 23:
+                filtered_values = savgol_filter(autotune_clean, 23, 3).tolist()
+            else:
+                # Default fallback for any unrecognized filter or insufficient data
+                filtered_values = autotune_clean
         else:
-            l.append(j)
-    l1 = l
-
-    # use easy identifiable variable names
-    x = l_time
-    y1 = l1
-    y2 = l2
-
-    return x, y1, y2
+            filtered_values = autotune_clean
+    
+    # Put the filtered values back into the original positions
+    filtered_autotune = autotune_float.copy()
+    filter_idx = 0
+    for i, val in enumerate(autotune_float):
+        if not np.isnan(val) and filter_idx < len(filtered_values):
+            filtered_autotune[i] = round(float(filtered_values[filter_idx]), 2)
+            filter_idx += 1
+    
+    # Create display format for pump values (set half-hour entries to "nan")
+    pump_display = []
+    for i, (time, pump_val) in enumerate(zip(times, pump_float)):
+        if ":30" in str(time):  # Half-hour entries
+            pump_display.append("nan")
+        else:  # Hour entries or empty entries
+            if np.isnan(pump_val):
+                pump_display.append("nan")
+            else:
+                pump_display.append(pump_val)
+    
+    return times, pump_display, filtered_autotune
